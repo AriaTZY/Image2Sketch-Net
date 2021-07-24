@@ -29,9 +29,11 @@ if __name__ == '__main__':
     parser.add_argument('--datapath', type=str, default='MaskDataSet/', help='The path of Test data, it can be a '
                                                                              'folder or an image file name')
     parser.add_argument('--outpath', type=str, default='output/Pipeline/')
-    parser.add_argument('--cuda', type=bool, default=True)
+    parser.add_argument('--cuda', type=bool, default=False)
     parser.add_argument('--version', type=int, default=2)
     parser.add_argument('--maskmode', type=str, default='soft')  # or binary
+    parser.add_argument('--softctr', type=float, default=0.3, help='soft control')  # smaller value can expose more object part
+    parser.add_argument('--resolution', type=int, default=1)  # 1, 2, 3, 4 levels
     args = parser.parse_args()
 
     "For non-cmd run"
@@ -105,7 +107,7 @@ if __name__ == '__main__':
 
         # " soft method "
         if args.maskmode == 'soft':
-            mask_np[mask_np > 0.5] = 1
+            mask_np[mask_np > args.softctr] = 1
             mask_np = cv.resize(mask_np, dsize=(w, h))
             mask_np_3c = mask_np[:, :, np.newaxis]
             cropped_img = np.array(img * mask_np_3c, np.uint8)
@@ -128,7 +130,10 @@ if __name__ == '__main__':
         # ============================
         #         Sketch Net
         # ============================
-        cropped_img_tensor = image2tensor(cropped_img, img_sz=424, mode='cv')
+        if args.resolution == 1: resized_size = 300
+        else: resized_size = args.resolution * 424
+
+        cropped_img_tensor = image2tensor(cropped_img, img_sz=resized_size, mode='cv')
         if cuda: cropped_img_tensor = cropped_img_tensor.cuda()
         pred_sketch = G_net(cropped_img_tensor)
         pred_sketch = torch.squeeze(pred_sketch)
@@ -175,6 +180,13 @@ if __name__ == '__main__':
             save_name = '{}/{}.png'.format(out_root, img_name)
             cv.imwrite(save_name, sheet)
             print('Processing {}/{}, save in {}'.format(i, len(img_names), save_name))
+
+            # live display mode
+            resized_w = int(400 / sheet.shape[0] * sheet.shape[1])
+            sheet = cv.resize(sheet, (resized_w, 400))
+            cv.imshow('', sheet)
+            cv.waitKey(0)
+
 
 
 
