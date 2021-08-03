@@ -8,6 +8,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--mode', type=str, default='PC')
 parser.add_argument('--cuda', type=bool, default=False)
+parser.add_argument('--name', type=str, default='_x600', help='model name suffix')
 args = parser.parse_args()
 
 epochs = 10000
@@ -22,7 +23,9 @@ img2skt = True
 # cuda = True if torch.cuda.is_available() else False
 cuda = args.cuda
 
-ABdataset = ImageDataset(data_path, img_size=424)
+model_name = args.name
+
+ABdataset = ImageDataset(data_path, img_size=600)
 dataloader = DataLoader(dataset=ABdataset, batch_size=batch_size, shuffle=True)
 
 if img2skt:
@@ -40,10 +43,10 @@ if cuda:
     D_net = D_net.cuda()
 
 # resume training
-if os.path.exists('checkpoints/G_net.pth'):
+if os.path.exists('checkpoints/G_net'+model_name+'.pth'):
     print('resume training, loading pre-trained model...')
-    G_net.load_state_dict(torch.load('checkpoints/G_net.pth'))
-    # D_net.load_state_dict(torch.load('checkpoints/D_net.pth'))
+    G_net.load_state_dict(torch.load('checkpoints/G_net' + model_name + '.pth'))
+    D_net.load_state_dict(torch.load('checkpoints/D_net' + model_name + '.pth'))
 
 # print(D_net)
 G_optimizer = torch.optim.Adam(G_net.parameters(), lr=lr)
@@ -88,7 +91,7 @@ for epoch in range(epochs):
         genAB = torch.cat([imgA, gen_B], dim=1)  # cat along 'channel' axis
         pred_fake = D_net(genAB)
 
-        loss_G_GAN = GAN_loss(pred_fake, valid)
+        loss_G_GAN = Patch_GAN_loss(pred_fake, True, GAN_loss, cuda)
         loss_G_L1 = L1_loss(gen_B, imgB)
         loss_G = loss_G_GAN + loss_G_L1
 
@@ -101,12 +104,12 @@ for epoch in range(epochs):
         D_optimizer.zero_grad()
 
         realAB = torch.cat([imgA, imgB], dim=1)
-        pred_real_D = D_net(realAB)
-        loss_D_real = GAN_loss(pred_real_D, valid)
+        pred_real_D = D_net(realAB.detach())  # it is important, detach preventing training G net when training D net
+        loss_D_real = Patch_GAN_loss(pred_real_D, True, GAN_loss, cuda)
 
         fakeAB = torch.cat([imgA, gen_B.detach()], dim=1)
         pred_fake_D = D_net(fakeAB)
-        loss_D_fake = GAN_loss(pred_fake_D, false)
+        loss_D_fake = Patch_GAN_loss(pred_fake_D, False, GAN_loss, cuda)
 
         loss_D = loss_D_real + loss_D_fake
         loss_D.backward()
@@ -122,15 +125,15 @@ for epoch in range(epochs):
         # =============
         if iter % 150 == 0:
             print('>>>> save models')
-            save_network(G_net, 'G_net.pth', cuda)
-            save_network(D_net, 'D_net.pth', cuda)
+            save_network(G_net, 'G_net' + model_name + '.pth', cuda)
+            save_network(D_net, 'D_net' + model_name + '.pth', cuda)
 
         # =============
         # save output
         # =============
-        if iter % 50 == 0:
+        if iter % 300 == 0:
             print('>>>> save pics')
-            visualize_batch_input(batch, 5, 'try.png')
+            # visualize_batch_input(batch, 5, 'try.png')
             sheet = visualize_result(imgA[0], gen_B[0], imgB[0], width=300, save='result.png')
 
 

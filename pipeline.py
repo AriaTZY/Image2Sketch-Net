@@ -4,6 +4,7 @@ from dataloader_skt import *
 from MaskNet.dataloader_mask import MaskDataset
 import matplotlib.pyplot as plt
 import argparse
+from virtual_sketching.test_vectorization import *
 
 
 # for single image test, no need to call "Database" class, use this
@@ -24,16 +25,27 @@ def image2tensor(img, img_sz=224, mode='cv'):
     return img
 
 
+# gamma transform for image enhancement
+def gamma(img, arg):
+    img = np.array(img / 255, np.float)
+    img = cv.pow(img, arg)
+    img = np.array(img * 255, np.uint8)
+    return img
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--datapath', type=str, default='MaskDataSet/', help='The path of Test data, it can be a '
                                                                              'folder or an image file name')
-    parser.add_argument('--outpath', type=str, default='output/Pipeline/')
+    parser.add_argument('--outpath', type=str, default='output/Pipeline_and_vectorize/')
     parser.add_argument('--cuda', type=bool, default=False)
     parser.add_argument('--version', type=int, default=2)
     parser.add_argument('--maskmode', type=str, default='soft')  # or binary
-    parser.add_argument('--softctr', type=float, default=0.3, help='soft control')  # smaller value can expose more object part
-    parser.add_argument('--resolution', type=int, default=1)  # 1, 2, 3, 4 levels
+    parser.add_argument('--softctr', type=float, default=0.5, help='soft control')  # smaller value can expose more object part
+    parser.add_argument('--resolution', type=int, default=2)  # 1, 2, 3, 4 x 424 levels
+    parser.add_argument('--background', type=bool, default=True, help='whether to run mask net to crop foreground')
+    parser.add_argument('--vec_input_sz', type=int, default=600, help='resize the sketch image to this size and input to vectorize net')
+    parser.add_argument('--merge', type=bool, default=False, help='whether to use positive+negative and merge strategy')
     args = parser.parse_args()
 
     "For non-cmd run"
@@ -80,66 +92,96 @@ if __name__ == '__main__':
 
     data_path = args.datapath
 
-    def single_pipeline(img_path):
-        # img = Image.open(img_path)
-        # w, h = img.size()
-        # img_tensor = image2tensor(img, mode='PIL')
-
-        img = cv.imread(img_path)
-        img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+    def core_process(back, img, resized_size):
         h, w = img.shape[:2]
-        img_tensor = image2tensor(img)
+        # img_tensor = image2tensor(img, resized_size)
+        # if cuda: img_tensor = img_tensor.cuda()
 
-        if cuda: img_tensor = img_tensor.cuda()
+        # If run Mask Net
+        if back:
+            # ============================
+            #          Mask Net
+            # ============================
+            img_tensor_for_mask = image2tensor(img)  # mask net's input require smaller image
+            pred_mask = MaskNet(img_tensor_for_mask)
 
-        # ============================
-        #          Mask Net
-        # ============================
-        pred_mask = MaskNet(img_tensor)
+            # ============================
+            #     Crop Image by Mask
+            # ============================
+            pred_mask = torch.squeeze(pred_mask)
+            mask_np = pred_mask.detach().cpu().numpy()
+            white_background = np.zeros([h, w, 3], np.uint8)
+            white_background = white_background + 255
 
-        # ============================
-        #     Crop Image by Mask
-        # ============================
-        pred_mask = torch.squeeze(pred_mask)
-        mask_np = pred_mask.detach().cpu().numpy()
-        white_background = np.zeros([h, w, 3], np.uint8)
-        white_background = white_background + 255
+            # " soft method "
+            if args.maskmode == 'soft':
+                mask_np[mask_np > args.softctr] = 1
+                mask_np = cv.resize(mask_np, dsize=(w, h))
+                mask_np_3c = mask_np[:, :, np.newaxis]
+                cropped_img = np.array(img * mask_np_3c, np.uint8)
+                cropped_img = cropped_img + np.array(white_background * (1 - mask_np_3c), np.uint8)
 
-        # " soft method "
-        if args.maskmode == 'soft':
-            mask_np[mask_np > args.softctr] = 1
-            mask_np = cv.resize(mask_np, dsize=(w, h))
-            mask_np_3c = mask_np[:, :, np.newaxis]
-            cropped_img = np.array(img * mask_np_3c, np.uint8)
-            cropped_img = cropped_img + np.array(white_background * (1 - mask_np_3c), np.uint8)
+            # " binary method "
+            else:
+                mask_np[mask_np > 0.5] = 1
+                mask_np[mask_np <= 0.5] = 0
+                mask_np = np.array(mask_np * 255, np.uint8)
+                mask_np = cv.resize(mask_np, dsize=(w, h))
+                ret, mask_np_inv = cv.threshold(mask_np, 120, 255, cv.THRESH_BINARY_INV)
+                cropped_img = cv.bitwise_and(img, img, mask=mask_np)
+                cropped_img = cropped_img + cv.bitwise_and(white_background, white_background, mask=mask_np_inv)
 
-        # " binary method "
+            # when do mask net, no need to do gamma enhancement, but sketch needed!
+            cropped_img = gamma(cropped_img, 2.0)
+            cropped_img_tensor = image2tensor(cropped_img, img_sz=resized_size, mode='cv')
+
+        # No Mask Net mode
         else:
-            mask_np[mask_np > 0.5] = 1
-            mask_np[mask_np <= 0.5] = 0
-            mask_np = np.array(mask_np * 255, np.uint8)
-            mask_np = cv.resize(mask_np, dsize=(w, h))
-            ret, mask_np_inv = cv.threshold(mask_np, 120, 255, cv.THRESH_BINARY_INV)
-            cropped_img = cv.bitwise_and(img, img, mask=mask_np)
-            cropped_img = cropped_img + cv.bitwise_and(white_background, white_background, mask=mask_np_inv)
-
-        # cv.imshow('mask', mask_np)
-        # cv.imshow('img', cropped_img)
-        # cv.waitKey(0)
+            cropped_img = img
+            cropped_img_tensor = gamma(cropped_img, 2.0)
+            cropped_img_tensor = image2tensor(cropped_img_tensor, resized_size)
 
         # ============================
         #         Sketch Net
         # ============================
-        if args.resolution == 1: resized_size = 300
-        else: resized_size = args.resolution * 424
-
-        cropped_img_tensor = image2tensor(cropped_img, img_sz=resized_size, mode='cv')
         if cuda: cropped_img_tensor = cropped_img_tensor.cuda()
         pred_sketch = G_net(cropped_img_tensor)
         pred_sketch = torch.squeeze(pred_sketch)
         pred_sketch = pred_sketch.detach().cpu().numpy()
         pred_sketch = np.array(pred_sketch * 255, np.uint8)
         pred_sketch = cv.resize(pred_sketch, (w, h))
+
+        return cropped_img, pred_sketch
+
+
+    # pipeline, including reading, processing, display
+    def single_pipeline(back, img_path, merge=args.merge):
+        # img size after resize
+        if args.resolution == 0: resized_size = 300
+        else: resized_size = args.resolution * 424
+
+        img = cv.imread(img_path)
+        img = cv.cvtColor(img, cv.COLOR_BGR2RGB)
+
+        # ============================
+        #       Core process
+        # ============================
+        h, w = img.shape[:2]
+        cropped_img, pred_sketch = core_process(back, img, resized_size)
+        if merge:  # merge mode usually is used in animal object
+            _, pred_sketch2 = core_process(back, 255-img, resized_size)
+            pred_sketch = cv.bitwise_and(pred_sketch, pred_sketch2)
+
+        # ============================
+        #        Vectorize
+        # ============================
+        saved_pred_sketch = cv.resize(pred_sketch, (args.vec_input_sz, int(args.vec_input_sz/pred_sketch.shape[1]*pred_sketch.shape[0])))
+        name_start = img_path[::-1].find('/')
+        name_end = img_path[::-1].find('.')
+        img_name = img_path[-name_start:-(name_end + 1)]
+        # save the result after sketchized
+        cv.imwrite(args.outpath + img_name + '_sketch.png', saved_pred_sketch)
+        sketch2vector(args.outpath, img_name + '_sketch.png', 1, model_base_dir='checkpoints/snapshot/')
 
         # ============================
         #       Save or Display
@@ -155,9 +197,9 @@ if __name__ == '__main__':
 
 
     # ==================== single image test =====================
-    if data_path[-3:] == 'jpg' or data_path[-3:] == 'png':
+    if data_path[-3:].lower() == 'jpg' or data_path[-3:].lower() == 'png':
         print('Single image test mode')
-        sheet = single_pipeline(data_path)
+        sheet = single_pipeline(args.background, data_path)
         '''save image'''
         root = args.outpath
         if not os.path.exists(root): os.makedirs(root)
@@ -174,22 +216,18 @@ if __name__ == '__main__':
 
         for i, img_name in enumerate(img_names):
             img_path = data_path + '/' + img_name
-            sheet = single_pipeline(img_path)
+            sheet = single_pipeline(args.background, img_path)
             ''' save images '''
             img_name = img_name[:img_name.rfind('.')]
-            save_name = '{}/{}.png'.format(out_root, img_name)
+            save_name = '{}/{}.png'.format(out_root, img_name+str(args.resolution))
             cv.imwrite(save_name, sheet)
             print('Processing {}/{}, save in {}'.format(i, len(img_names), save_name))
 
             # live display mode
-            resized_w = int(400 / sheet.shape[0] * sheet.shape[1])
-            sheet = cv.resize(sheet, (resized_w, 400))
-            cv.imshow('', sheet)
-            cv.waitKey(0)
-
-
-
-
+            # resized_w = int(400 / sheet.shape[0] * sheet.shape[1])
+            # sheet = cv.resize(sheet, (resized_w, 400))
+            # cv.imshow('', sheet)
+            # cv.waitKey(0)
 
 
 

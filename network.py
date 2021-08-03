@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import torchvision.transforms as transforms
 
 
 class conv(nn.Module):
@@ -129,10 +130,16 @@ class Discriminator(nn.Module):
         x = self.convolution(x)
         res = self.downsample(x)
         res = self.sigmoid(res)
-        # print('res shape:', res.max(), res.min())
+        # print('res shape:', res.shape)
         return res
 
 
-
+def Patch_GAN_loss(tensor, flag, loss, cuda):
+    if flag:
+        single_label = torch.tensor(1.0)
+    else:
+        single_label = torch.tensor(1.0)
+    if cuda: single_label = single_label.cuda()
+    return loss(tensor, single_label.expand_as(tensor))
 
 

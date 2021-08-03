@@ -66,3 +66,37 @@ High resolution with "soft" mask mode (824x824 input)
 low resolution with "hard" mask mode, you can see the jagged boundary (424x424 input)
 
 ![000010_hard](./docs/000010_hard.png)
+
+
+
+## 2021.8.2 update log
+
+1）在“pipeline.py”文件中增加了background的选项，用于是否选择进行Mask Net操作
+
+2）在pipeline.py中原先第96行左右的位置有一个Resize的步骤，但之前一直用的是242（Mask Net要求尺寸），所以其实当再Resize成不同大小输入Sketch Net的时候，已经是极度损失信息的了。所以之前大尺寸表现差就是因为这个。*我更新了这个错误以后，其实高分辨率图像已经表现很好了，但是我还继续训练600尺寸版本的 Sketch Net。*（上：有错误的，下：更新错误后的）
+
+<img src="/docs/before_the_mistake.png" alt="before_the_mistake" style="zoom:50%;" />
+
+<img src="/docs/after_correct_mistake.png" alt="after_correct_mistake" style="zoom:40%;" />
+
+3）训练了600x600版本的Sketch Net，其中修改了D网络的loss，始得其不再对出入图像有要求，最终可以是以1x1或是2x2甚至更大的特征图为网络输出，只需要更改一下target，使用expand_as 变成同样大小即可。
+
+4）在更新D网络的时候，开始忘记给G网络的输出detach()了，但感觉加了以后初期也没有影响很多，可以继续探索一下之后。
+
+5）我发现将图片调黑之后再过网络效果会好挺多（暂时用的PS）
+
+## 2021.8.3 update log
+
+### 针对改善小动物等细节不足问题
+
+ 1）尝试从训练数据集入手，对训练集生成的过程中：（UCL_Generation/no_mask_pipeline.py文件中）
+
+* 在RGB原图上加入直方图均衡，效果不明显
+* 在RGB原图上调低亮度，效果几乎没有
+* 在pencil图（即图像处理之后的图）上抑制噪声后做直方图均衡，效果很明显，但同时对噪声的放大也不含糊，基本上不能用，处理人像如此，处理交通工具等可想而知。
+* 结论：还是保留原有的gamma变换最有效
+
+2）在测试时做出改变，即改变输入进网络的图片：（在MySketch/pipeline.py文件中直接修改的）
+
+* 原来输入图片都没有做gamma变换，这是最大的问题之一，补上了效果有所起色！但对于羊等过度曝光的图还是细节不构明显。（**记得只给Sketch Net做gamma变换，Mask Net不需要，否则mask将不准确**）
+* 使用“正片+负片”处理后再使用bitwise_and()方法，细节全部到位，但缺点就是会出现“双轮廓”！处理羊这些很好，但是处理交通工具就要斟酌使用，因为会出现很多双线条。所以我的想法是让用户自己选择处理方案。
