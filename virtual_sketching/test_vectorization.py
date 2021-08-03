@@ -378,7 +378,7 @@ def main_testing(test_image_base_path, test_image_raw_name,
         assert drawing_len >= 0
 
         # 保存的过程中，会自动在sampling_base_dir底下创建一个seq_data文件夹，然后再把.npy文件保存进去
-        save_seq_data(sampling_base_dir, test_image_raw_name + '_' + str(sampling_i),
+        save_seq_data(sampling_base_dir, test_image_raw_name,
                       strokes_raw_out, multi_cursors,
                       test_image_size, round_new_lengths, eval_hps_model.min_width)
 
@@ -386,8 +386,7 @@ def main_testing(test_image_base_path, test_image_raw_name,
         visualize_vec_file(sampling_base_dir, test_image_raw_name, gif=True)
 
 
-
-def sketch2vector(img_path, img_name, sample_num, model_base_dir=None):
+def sketch2vector(img_path_in, img_path_out, img_name, sample_num, model_base_dir=None):
     if model_base_dir is None:
         model_base_dir = 'virtual_sketching/model/'
     model_name = 'pretrain_clean_line_drawings'
@@ -403,7 +402,8 @@ def sketch2vector(img_path, img_name, sample_num, model_base_dir=None):
     # set numpy output to something sensible
     np.set_printoptions(precision=8, edgeitems=6, linewidth=200, suppress=True)
 
-    main_testing(img_path, img_name, img_path, model_base_dir, model_name, sample_num,
+    # params: input path, input image name(with .png or .jpg), output_path
+    main_testing(img_path_in, img_name, img_path_out, model_base_dir, model_name, sample_num,
                  draw_seq=draw_seq, draw_order=draw_color_order,
                  state_dependent=state_dependent, longer_infer_lens=longer_infer_lens,
                  round_stop_state_num=round_stop_state_num, stroke_acc_threshold=stroke_acc_threshold)

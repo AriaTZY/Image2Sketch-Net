@@ -263,12 +263,12 @@ def visualize_vec_file(file_pth, file_name, gif=True):
     min_window_size = 32
     raster_size = 128
     # create save names
-    npz_path = file_pth + 'seq_data/' + file_name + '_0.npz'
-    gif_path = None if not gif else file_pth + file_name + '.gif'
+    npz_path = file_pth + 'seq_data/' + file_name + '.npz'
+    gif_path = None if not gif else file_pth + 'gif/' + file_name + '.gif'
 
     # do the canvas draw
     _, _, _, _, canvas = canvas_draw(npz_path, min_window_size, raster_size, gif_path)
-    cv.imwrite(file_pth + file_name + '_vector.png', canvas)
+    cv.imwrite(file_pth + 'vector/' + file_name + '.png', canvas)
 
 
 if __name__ == '__main__':

@@ -42,19 +42,32 @@ if __name__ == '__main__':
     parser.add_argument('--version', type=int, default=2)
     parser.add_argument('--maskmode', type=str, default='soft')  # or binary
     parser.add_argument('--softctr', type=float, default=0.5, help='soft control')  # smaller value can expose more object part
-    parser.add_argument('--resolution', type=int, default=2)  # 1, 2, 3, 4 x 424 levels
+    parser.add_argument('--resolution', type=int, default=2)  # 1, 2, 3, 4 x 424 levels or 0 means 800 high resolution
     parser.add_argument('--background', type=bool, default=True, help='whether to run mask net to crop foreground')
     parser.add_argument('--vec_input_sz', type=int, default=600, help='resize the sketch image to this size and input to vectorize net')
+    parser.add_argument('--vec_switch', type=bool, default=True, help='whether to do the vectorize')
     parser.add_argument('--merge', type=bool, default=False, help='whether to use positive+negative and merge strategy')
     args = parser.parse_args()
 
     "For non-cmd run"
     # args.datapath = 'E:/Postgraduate/Dataset/WithBack/image/'
-    args.datapath = 'E:/Postgraduate/Dataset/iphone/'
+    args.datapath = '../Dataset/iphone/'
 
     cuda = args.cuda
     model_version = args.version
     print('Now Running Mask Model version: #', model_version)
+
+    # ======================
+    #    Create folders
+    # ======================
+    sketch_folder = args.outpath + 'sketch/'
+    gallery_folder = args.outpath + 'gallery/'
+    vector_folder = args.outpath + 'vector/'
+    gif_folder = args.outpath + 'gif/'
+    os.makedirs(sketch_folder, exist_ok=True)
+    os.makedirs(gallery_folder, exist_ok=True)
+    os.makedirs(vector_folder, exist_ok=True)
+    os.makedirs(gif_folder, exist_ok=True)
 
     # ======================
     #  Network Preparation
@@ -76,6 +89,7 @@ if __name__ == '__main__':
 
     " Sketch Net "
     G_net = Generator(inchannel=3, outchannel=1)
+    G_net_pth = 'checkpoints/G_net_x600.pth' if args.resolution == 0 else 'checkpoints/G_net.pth'
 
     if cuda:
         MaskNet = MaskNet.cuda()
@@ -85,7 +99,7 @@ if __name__ == '__main__':
     if os.path.exists(model_path):
         print('loading pre-trained model...')
         MaskNet.load_state_dict(torch.load(model_path))
-        G_net.load_state_dict(torch.load('checkpoints/G_net.pth'))
+        G_net.load_state_dict(torch.load(G_net_pth))
 
     MaskNet.eval()
     G_net.eval()
@@ -103,6 +117,7 @@ if __name__ == '__main__':
             #          Mask Net
             # ============================
             img_tensor_for_mask = image2tensor(img)  # mask net's input require smaller image
+            if cuda: img_tensor_for_mask = img_tensor_for_mask.cuda()
             pred_mask = MaskNet(img_tensor_for_mask)
 
             # ============================
@@ -157,7 +172,7 @@ if __name__ == '__main__':
     # pipeline, including reading, processing, display
     def single_pipeline(back, img_path, merge=args.merge):
         # img size after resize
-        if args.resolution == 0: resized_size = 300
+        if args.resolution == 0: resized_size = 600
         else: resized_size = args.resolution * 424
 
         img = cv.imread(img_path)
@@ -175,13 +190,14 @@ if __name__ == '__main__':
         # ============================
         #        Vectorize
         # ============================
-        saved_pred_sketch = cv.resize(pred_sketch, (args.vec_input_sz, int(args.vec_input_sz/pred_sketch.shape[1]*pred_sketch.shape[0])))
-        name_start = img_path[::-1].find('/')
-        name_end = img_path[::-1].find('.')
-        img_name = img_path[-name_start:-(name_end + 1)]
-        # save the result after sketchized
-        cv.imwrite(args.outpath + img_name + '_sketch.png', saved_pred_sketch)
-        sketch2vector(args.outpath, img_name + '_sketch.png', 1, model_base_dir='checkpoints/snapshot/')
+        if args.vec_switch:
+            saved_pred_sketch = cv.resize(pred_sketch, (args.vec_input_sz, int(args.vec_input_sz/pred_sketch.shape[1]*pred_sketch.shape[0])))
+            name_start = img_path[::-1].find('/')
+            name_end = img_path[::-1].find('.')
+            img_name = img_path[-name_start:-(name_end + 1)]
+            # save the result after sketchized
+            cv.imwrite(sketch_folder + img_name + '.png', saved_pred_sketch)
+            sketch2vector(sketch_folder, args.outpath, img_name + '.png', 1, model_base_dir='checkpoints/snapshot/')
 
         # ============================
         #       Save or Display
@@ -201,7 +217,7 @@ if __name__ == '__main__':
         print('Single image test mode')
         sheet = single_pipeline(args.background, data_path)
         '''save image'''
-        root = args.outpath
+        root = gallery_folder
         if not os.path.exists(root): os.makedirs(root)
         img_name = data_path[data_path.rfind('/') + 1:data_path.rfind('.')]
         save_name = '{}/{}.png'.format(root, img_name)
@@ -210,7 +226,7 @@ if __name__ == '__main__':
     # ==================== batch image test ==================
     else:
         print('Batch images test mode')
-        out_root = args.outpath
+        out_root = gallery_folder
         if not os.path.exists(out_root): os.makedirs(out_root)
         img_names = os.listdir(data_path)
 
@@ -219,7 +235,7 @@ if __name__ == '__main__':
             sheet = single_pipeline(args.background, img_path)
             ''' save images '''
             img_name = img_name[:img_name.rfind('.')]
-            save_name = '{}/{}.png'.format(out_root, img_name+str(args.resolution))
+            save_name = '{}/{}.png'.format(out_root, img_name)
             cv.imwrite(save_name, sheet)
             print('Processing {}/{}, save in {}'.format(i, len(img_names), save_name))
 
