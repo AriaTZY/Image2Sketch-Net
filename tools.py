@@ -42,6 +42,9 @@ def visualize_result(input, output, GT, width=None, save=None):
         sheet = cv.cvtColor(sheet, cv.COLOR_RGB2BGR)
         cv.imwrite(save, sheet)
 
+        # plt.imshow(sheet)
+        # plt.show()
+
     return sheet
 
 

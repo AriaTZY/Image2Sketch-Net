@@ -81,8 +81,77 @@ class Generator(nn.Module):
 
     def forward(self, x):
         output = self.model(x)
-        # print('generate:', output.shape, output.max(), output.min())
+
+        # =========================
+        #  visualize hidden layer
+        # =========================
+        # show = x
+        # layer_choice = 20  # change here to visualize the layer you want
+        # for i, layer in enumerate(self.model):
+        #     show = layer(show)
+        #     if i == layer_choice:
+        #         break
+        # show = show.detach().cpu().numpy()
+        # import matplotlib.pyplot as plt
+        # for j in range(5):  # loop 5 times
+        #     for i in range(min(10, show.shape[1])):
+        #         plt.subplot(2, 5, i+1)
+        #         choice = np.random.randint(0, show.shape[1])
+        #         plt.imshow(show[0, choice, :, :])
+        #         name = 'layer {}, channel {}/{}'.format(layer_choice, i+1, show.shape[1])
+        #         plt.title(name)
+        # plt.show()
+
         return output
+
+
+class Generator_Shallow(nn.Module):
+    def __init__(self, inchannel=3, outchannel=1):
+        super(Generator_Shallow, self).__init__()
+
+        # Encoder
+        self.down1 = conv(inchannel, 48, 5, 2)  # 424 -> 212
+        self.flat1_1 = conv(48, 128, 3, 1)
+        self.flat1_2 = conv(128, 128, 3, 1)
+        self.flat1_3 = conv(128, 128, 3, 1)
+
+        self.up3 = deconv(128, 48, 4, 2, 1)  # 212 -> 424
+        self.flat6_1 = conv(48, 24, 3, 1)
+        self.flat6_2 = conv(24, outchannel, 3, 1)
+
+        self.final = nn.Sequential(
+            nn.Conv2d(outchannel, outchannel, 3, stride=1, padding=1),
+            nn.Sigmoid()
+        )
+
+        self.model = nn.Sequential(self.down1, self.flat1_1, self.flat1_2, self.flat1_3,
+                                   self.up3, self.flat6_1, self.flat6_2, self.final)
+
+    def forward(self, x):
+        output = self.model(x)
+
+        # =========================
+        #  visualize hidden layer
+        # =========================
+        # show = x
+        # layer_choice = 20  # change here to visualize the layer you want
+        # for i, layer in enumerate(self.model):
+        #     show = layer(show)
+        #     if i == layer_choice:
+        #         break
+        # show = show.detach().cpu().numpy()
+        # import matplotlib.pyplot as plt
+        # for j in range(5):  # loop 5 times
+        #     for i in range(min(10, show.shape[1])):
+        #         plt.subplot(2, 5, i+1)
+        #         choice = np.random.randint(0, show.shape[1])
+        #         plt.imshow(show[0, choice, :, :])
+        #         name = 'layer {}, channel {}/{}'.format(layer_choice, i+1, show.shape[1])
+        #         plt.title(name)
+        # plt.show()
+
+        return output
+
 
 
 class Discriminator(nn.Module):
@@ -134,12 +203,16 @@ class Discriminator(nn.Module):
         return res
 
 
+from torch.autograd import Variable
 def Patch_GAN_loss(tensor, flag, loss, cuda):
     if flag:
-        single_label = torch.tensor(1.0)
+        # single_label = torch.tensor(1.0)
+        single_label = Variable(torch.Tensor([1.0]), requires_grad=False)
     else:
-        single_label = torch.tensor(1.0)
+        # single_label = torch.tensor(0.0)
+        single_label = Variable(torch.Tensor([0.0]), requires_grad=False)
     if cuda: single_label = single_label.cuda()
+
     return loss(tensor, single_label.expand_as(tensor))
 
 

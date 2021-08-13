@@ -42,7 +42,7 @@ if __name__ == '__main__':
     parser.add_argument('--version', type=int, default=2)
     parser.add_argument('--maskmode', type=str, default='soft')  # or binary
     parser.add_argument('--softctr', type=float, default=0.5, help='soft control')  # smaller value can expose more object part
-    parser.add_argument('--resolution', type=int, default=2)  # 1, 2, 3, 4 x 424 levels or 0 means 800 high resolution
+    parser.add_argument('--resolution', type=int, default=1)  # 1, 2, 3, 4 x 424 levels or 0 means 800 high resolution
     parser.add_argument('--background', type=bool, default=True, help='whether to run mask net to crop foreground')
     parser.add_argument('--vec_input_sz', type=int, default=600, help='resize the sketch image to this size and input to vectorize net')
     parser.add_argument('--vec_switch', type=bool, default=True, help='whether to do the vectorize')
@@ -51,7 +51,7 @@ if __name__ == '__main__':
 
     "For non-cmd run"
     # args.datapath = 'E:/Postgraduate/Dataset/WithBack/image/'
-    args.datapath = '../Dataset/iphone/'
+    args.datapath = '../Dataset/iphone/IMG_1060.JPG'
 
     cuda = args.cuda
     model_version = args.version

@@ -69,6 +69,28 @@ low resolution with "hard" mask mode, you can see the jagged boundary (424x424 i
 
 
 
+**But,** you can change the threshold of soft mask mode to enlarge or shrink the mask area while avoid the jagged boundary. Finally, I adopt this method, the results are shown below:
+
+![0dogs](/docs/0dogs.png)
+
+![IMG_0036](/docs/IMG_0036.png)
+
+![IMG_0827](/docs/IMG_0827.png)
+
+![IMG_1061](/docs/IMG_1061.png)
+
+
+
+## Compare to Canny edge detection
+
+Canny detection requires manual adjustment of two threshold parameters to determine the complexity of the edge and the process is troublesome. What's more important is that canny cannot understand the image in a high and abstract level, so the edges are easily discontinuous, and the position of the lines will be the same as the original image.
+
+<img src="/docs/ambulance_cannt.png" alt="ambulance_cannt" style="zoom:50%;" />
+
+![IMG_0762](/docs/IMG_0762.png)
+
+ 
+
 ## 2021.8.2 update log
 
 1）在“pipeline.py”文件中增加了background的选项，用于是否选择进行Mask Net操作

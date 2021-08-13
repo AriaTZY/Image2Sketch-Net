@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 
 class ImageDataset(Dataset):
-    def __init__(self, path, img_size=128, aug=True):
+    def __init__(self, path, img_size=128, aug=True, image_folder='image'):
         super(ImageDataset, self).__init__()
         self.transform = transforms.Compose([
             transforms.Resize([img_size, img_size]),
@@ -17,7 +17,7 @@ class ImageDataset(Dataset):
 
         self.img_sz = img_size
         self.path = path
-        self.img_path = os.path.join(self.path, 'image/')
+        self.img_path = os.path.join(self.path, image_folder + '/')
         self.skt_path = os.path.join(self.path, 'sketch/')
         self.img_names = os.listdir(self.skt_path)
         self.aug = aug
@@ -61,6 +61,27 @@ class ImageDataset(Dataset):
         imgB = self.transform(skt)
 
         return {'A': imgA, 'B': imgB}
+
+    def __len__(self):
+        return len(self.img_names)
+
+
+class ImageDatasetTest(Dataset):
+    def __init__(self, path, img_size=128):
+        super(ImageDatasetTest, self).__init__()
+        self.transform = transforms.Compose([
+            transforms.Resize([img_size, img_size]),
+            transforms.ToTensor()
+        ])
+
+        self.img_sz = img_size
+        self.path = path + '/'
+        self.img_names = os.listdir(self.path)
+
+    def __getitem__(self, item):
+        img = Image.open(self.path + self.img_names[item])
+        imgA = self.transform(img)  # resize and from [0-255] to [0, 1]
+        return imgA
 
     def __len__(self):
         return len(self.img_names)
