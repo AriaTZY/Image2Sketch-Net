@@ -1,15 +1,153 @@
 # Image to Sketch Network
 
-## 1. File Explanation
+## 1. Environment
 
-##### Sketch Net
+- pytorch == 1.7.1 (>1.x.x should all be fine)
+- torchvision == 0.8.2
+- tensorflow  == 1.14.1 (1.12.0 <= version <=1.15.0)
+- [opencv](https://opencv.org/) == 3.4.2
+
+
+
+## 2. Test the full framework
+
+### Framework Structure:
+
+My framework consists of multiple steps:
+
+**natural image  ---->  Mask Net  ---->  Sketch Net  ----->  Virtual Sketching ----> Sketch (stroke format)**
+
+![pipeline-proposal](./docs/pipeline-proposal.jpg)
+
+
+
+### Requirement of Test Images 
+
+The network is mainly composed of "Mask Net" and "Sketch Net", among which Mask Net is an auxiliary function, so please keep the background of the input picture as simple as possible, and put the object you want to sketchlize in the middle of the image when you need to use MaskNet. Otherwise the network will not have any idea of which object should be selected.
+
+![input_quality](./docs/input_quality.jpg)
+
+Of course, if you decide not to use Mask Net, you can input any image you want to the network.
+
+
+
+### Run it!
+
+Here is the code you should type to test this framework:
+
+``` shell
+python pipeline.py --datapath 'Your/datapath/of/test/images/' --outpath 'The/folder/of/output/' --cuda True --version 2 --maskmode 'soft' --softctr 0.5 --resolution 2 --background True --vec_switch False --merge False --gamma True
+```
+
+==> **datapath:** it can be the folder or image (end with '.png' or '.jpg') path. When input folder path, make sure *you add '/' at last, or it will be an error, i.e., 'TestDataset/images/' instead of  'TestDataset/images'*
+
+==> **version:** Mask Net version, 1 or 2, but 2 performs better
+
+==> **maskmode:** how to binarize the generated mask, 'soft' is recommended. you also can use 'hard'
+
+==> **softctr:** the threshold of soft binarization. Smaller value can expose more foreground object part, [0, 1]  float value.
+
+==> **resolution:** The input image size. You can change this regardless your real input image size, but do not exceeded your input size is recommended. except 0 means 600,  other number means: N*424. e.g., 2 means the input image size will be resized to 2 * 424 = 828
+
+==> **background:** whether to use Mask Net.
+
+==> **vec_switch:** whether to use Virtual Sketching to convert to stroke format
+
+==> **merge:** whether to use positive+negative and merge strategy
+
+==> **gamma:** pre-process to enhance contrast
+
+
+
+Or... If you want some simpler version:
+
+``` shell
+python pipeline.py --datapath 'Your/datapath/of/test/images' --outpath 'The/folder/of/output' --cuda True
+```
+
+
+
+Or... if you want just run using default without any change:
+
+```shell
+python pipeline.py --cuda True
+```
+
+* The default input is in folder "input/iphone/"
+
+* The output folder will be in "output/Test888/"
+
+So, basically, you can drop your pics into default input folder and harvest them in default output folder.
+
+
+
+## 3. Quick Test
+
+The core of my project is the **Sketch Net**, so if you just want to only test the performance/capacity of the Sketch Net, you can use this quick test.
+
+Here doesn't provide shell *cmd* line, but you can run it in your IDE
+
+*If you want to change the default input images as yours, please find here and change the "datapath" to yours*
+
+```python
+if args.mask:
+    data_path = '../Dataset/masked_iphone/'
+else:
+    data_path = '../Dataset/iphone/'
+```
+
+
+
+## 4. Result
+
+### 4.1 Full Framework Results
+
+Here is the result of full pipeline, including Mask Net, Sketch Net, gamma enhancement (I didn't put the stroke form sketch here because it looks similar to the raster form)
+
+---
+
+**left:** natural images    
+
+**Middle:** foregrounds cropped by Mask Net    
+
+**Right:** generated Sketches by Sketch Net
+
+![0dogs](./docs/0dogs.png)
+
+![IMG_0036](./docs/IMG_0036.png)
+
+![IMG_0827](./docs/IMG_0827.png)
+
+![IMG_1061](./docs/IMG_1061.png)
+
+
+
+### 4.2 Sketch Net Only Results:
+
+Here is the results generated from the inputs which I manually crop the foreground objects. So it can eliminate the effect of Mask Net performance.
+
+---
+
+**Note:** Both the left and the right images represent the output sketch, they are identical. This is a compromise with the result display function.
+
+![0](./docs/0.png)
+![1](./docs/1.png)
+![4](./docs/4.png)
+![9](./docs/9.png)
+![15](./docs/15.png)
+
+# Appendix
+
+## A1. File Structure Explanation
+
+##### Sketch Net Part
 
 * **dataloader_skt:** The data-loader for Sketch Net, including data augmentation function
 * **network:** The architecture of Sketch Net, resemble to pix2pix (cGAN) network
 * **test:** Solo test for Sketch Net
 * **tools:** Some functions to visualize/save images/process mask image
 
-##### Mask Net
+##### Mask Net Part
 
 * **MaskNet/dataloader_mask:** Dataloader for mask net
 * **MaskNet/DataGeneration:** Generate training dataset from COCO, it followed by class
@@ -17,79 +155,45 @@
 * **MaskNet/MaskNetwork2** Deepper Mask Net, output mask size is 56 x 56
 * **train_mask, test_mask:** similar to above
 
+**Other Folders**
+
+* **checkpoints:** The trained models, '.pth' format files
+* **docs:** Some pics used in this README file
+* **logs:** Some output images saved during training progress
+* **MaskDataSet:** The dataset for training the Mask Net, generated from COCO dataset
+* **output:** The output images of my network
+* **Tensorboard:** tensorboard log files
 
 
-## 2. Checkpoints Note:
+
+## A2. Checkpoints Note:
+
+the file under
 
 * **MasNet_v2_notcentre: **The network trained on not centered mask image data. trained on 24/07/2021
 * **MaskNet_v2_stage1**: The model trained on centered mask data and saved on halfway, seems not overfitting
 * **MaskNet_v2_stage2:** The model saved after the full training, seems to have a serious overfitting
+* **deep_GAN_L1:** loss function: balanced BCE, lr: 0.001, new vgg discriminator
 
 
 
-## 3. Usage
+## A3. 'Soft' and 'hard' binarization
 
-### Usage Note:
-
-The network is mainly composed of "Mask Net" and "Sketch Net", among which Mask Net is an auxiliary function, so please keep the background of the input picture as simple as possible, and put the object you want to sketchize in the middle of the image. Otherwise the network will not have any idea of which object should be selected.
-
-#### 1. pipeline.py
-
-This file can run the whole process, i.e., ***Mask Net*** followed by ***Sketch Net***. Output images are in folder "output/Pipeline".
-
-``` 
-python pipeline.py --resolution 2 --cuda True --versio  2
-```
-
-**--datapath:** The path of folder which includes many or single test image (world images)
-
-**--outpath:** Default value is "output/Pipeline/", you can also assign your own output folder
-
-**--cuda:** Use or not use CUDA
-
-**--version:** Mask Net version, "1" is 28x28 mask size, "2" is 56x56 mask size
-
-**--maskmode:** 'soft' or 'hard', soft means crop foreground object with soft way, 'hard' method will case aliasing, but it will generate more clear boundary when it comes to Sketch Net.
-
-**--softctr:** [0, 1]  float value. 0.3 means the pixel in mask image smaller 0.3 will be set to 0. smaller it is, bigger the object
-
-**--resolution:** 1: 300x300, 2: 424x424, 3: 848x848, 4: 1272x1272.
-
-
-
-## Results
-
-High resolution with "soft" mask mode (824x824 input)
+High resolution with "soft" mask mode (with 824x824 input)
 
 ![000010](./docs/000010.png)
 
-low resolution with "hard" mask mode, you can see the jagged boundary (424x424 input)
+low resolution with "hard" mask mode, you can see the jagged boundary (with 424x424 input)
 
 ![000010_hard](./docs/000010_hard.png)
 
 
 
-**But,** you can change the threshold of soft mask mode to enlarge or shrink the mask area while avoid the jagged boundary. Finally, I adopt this method, the results are shown below:
-
-![0dogs](/docs/0dogs.png)
-
-![IMG_0036](/docs/IMG_0036.png)
-
-![IMG_0827](/docs/IMG_0827.png)
-
-![IMG_1061](/docs/IMG_1061.png)
-
-
-
-## Compare to Canny edge detection
+## A4. Compare with Canny Edge Detection
 
 Canny detection requires manual adjustment of two threshold parameters to determine the complexity of the edge and the process is troublesome. What's more important is that canny cannot understand the image in a high and abstract level, so the edges are easily discontinuous, and the position of the lines will be the same as the original image.
 
-<img src="/docs/ambulance_cannt.png" alt="ambulance_cannt" style="zoom:50%;" />
-
-![IMG_0762](/docs/IMG_0762.png)
-
- 
+![canny_compare](./docs/canny_compare.jpg)
 
 ## 2021.8.2 update log
 
