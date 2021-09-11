@@ -7,11 +7,11 @@ import imageio
 # Global configure parameters
 # ===========================
 C_stroke_resolution = 40  # indicate use how many points to represent one stroke
-C_line_mode = 'W'  # or 'U', 'W' represents strokes with width, 'U' represents uniform line width
-C_line_width = 1  # valid when line mode == 'U', specify the straight line width
+C_line_mode = 'U'  # or 'U', 'W' represents strokes with width, 'U' represents uniform line width
+C_line_width = 2  # valid when line mode == 'U', specify the straight line width
 C_round_num = 10
 # choose how many round to draw
-C_min_stroke_len = 0.003  # minimal stroke length threshold, if smaller than this, do not draw
+C_min_stroke_len = 0.07  # minimal stroke length threshold, if smaller than this, do not draw
 C_canvas_width = 600  # rendered canvas width, bigger size represents higher resolution
 
 V_disp_stop_time = 50  # unit: ms
@@ -273,15 +273,16 @@ def visualize_vec_file(file_pth, file_name, gif=True):
 
 if __name__ == '__main__':
     npz_path = 'E:/Postgraduate/virtual_sketching-main/outputs/sampling/' \
-               'clean_line_drawings__pretrain_clean_line_drawings/seq_data/0000_0.npz'
+               'clean_line_drawings__pretrain_clean_line_drawings/seq_data/COCO_test2014_000000002787.npz'
 
-    npz_path = '../output/Pipeline_and_vectorize/seq_data/IMG_1060_sketch_0.npz'
+    npz_path = 'C:/Users/tan/Desktop/res_2_Gamma/seq_data/COCO_test2014_000000002787.npz'
     min_window_size = 32
     raster_size = 128
 
-    strokes_x_list, strokes_y_list, strokes_w_list, strokes_length, canvas = canvas_draw(npz_path, min_window_size, raster_size, '../output/seq_data/sketch.gif')
+    strokes_x_list, strokes_y_list, strokes_w_list, strokes_length, canvas = canvas_draw(npz_path, min_window_size, raster_size, None)
 
-    cv.imshow('canvas', canvas)
-    cv.waitKey(0)
+    cv.imwrite('C:/Users/tan/Desktop/line_length_filter/{}_line_{}.png'.format('COCO_test2014_000000002787', C_min_stroke_len), canvas)
+    # cv.imshow('canvas', canvas)
+    # cv.waitKey(0)
 
 
