@@ -5,27 +5,31 @@ import matplotlib.pyplot as plt
 from tools import save_network, visualize_result
 import argparse
 from csv_process import *
+from network import weighted_BCE
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--mode', type=str, default='PC')
 parser.add_argument('--cuda', type=bool, default=False)
-parser.add_argument('--name', type=str, default='_deep_GAN_L1', help='model name suffix')
+parser.add_argument('--name', type=str, default='_deep_GAN_L1', help='model name suffix') #_
 parser.add_argument('--shallow', type=bool, default=False, help='Whether to choose shallow G net')
-parser.add_argument('--load', type=str, default=True, help='Whether to choose shallow G net')
+parser.add_argument('--load', type=str, default='True', help='Whether to choose shallow G net')
 parser.add_argument('--log_int', type=int, default=300, help='interval of write log file')
+parser.add_argument('--lr', type=float, default=0.0001, help='learning rate')
 args = parser.parse_args()
 
+# --mode SER --cuda True --name _shallow_L1 --shallow True --load False
 load_model = True if args.load == 'True' else False
 
 epochs = 350000
 if args.mode == 'PC':
     data_path = 'C:/Users/tan/Desktop/SketchDataset/'
 else:
-    data_path = '../Dataset/'
+    data_path = '../Dataset3/'
 
 batch_size = 5
-lr = 0.0001  # 0.01
+lr = args.lr
+print('learning rate:', lr)
 img2skt = True
 cuda = args.cuda
 model_name = args.name
@@ -33,8 +37,9 @@ model_name = args.name
 log_path = 'logs/sketch_oneshot/'
 os.makedirs(log_path, exist_ok=True)
 
-ABdataset = ImageDataset(data_path, img_size=424, image_folder='image')
-dataloader = DataLoader(dataset=ABdataset, batch_size=batch_size, shuffle=True)
+ABdataset = ImageDataset(data_path, img_size=424, image_folder='image')  # origin
+ABdataset_noaug = ImageDataset(data_path, img_size=424, aug=False, image_folder='image')  # origin
+dataloader = DataLoader(dataset=ABdataset, batch_size=batch_size, shuffle=False)
 
 if img2skt:
     inchannel = 3
@@ -56,10 +61,13 @@ if cuda:
     D_net = D_net.cuda()
 
 # resume training
+# G_net.load_state_dict(torch.load('checkpoints/G_net.pth'))
 if os.path.exists('checkpoints/G_net'+model_name+'.pth') and load_model:
     print('resume training, loading pre-trained model...')
     G_net.load_state_dict(torch.load('checkpoints/G_net' + model_name + '.pth'))
     D_net.load_state_dict(torch.load('checkpoints/D_net' + model_name + '.pth'))
+    # G_net.load_state_dict(torch.load('checkpoints/G_net.pth'))
+    # D_net.load_state_dict(torch.load('checkpoints/D_net_deep_GAN_L1.pth'))
 
 # or initialization
 else:
@@ -89,7 +97,7 @@ G_optimizer = torch.optim.Adam(G_net.parameters(), lr=lr)
 D_optimizer = torch.optim.Adam(D_net.parameters(), lr=lr)
 
 # loss function
-L1_loss = torch.nn.L1Loss()  # torch.nn.BCELoss() # torch.nn.L1Loss()
+L1_loss = torch.nn.L1Loss()  #torch.nn.MSELoss() #torch.nn.BCELoss(reduce=False)  #
 GAN_loss = torch.nn.BCELoss()
 
 if cuda:
@@ -131,9 +139,24 @@ for epoch in range(epochs):
         pred_fake = D_net(genAB)
 
         loss_G_GAN = Patch_GAN_loss(pred_fake, True, GAN_loss, cuda)
-        # loss_G_GAN = GAN_loss(pred_fake, valid)
+
+        # Choose one of the following two as similarity loss
+        " This is ordinary L1 loss"
         loss_G_L1 = L1_loss(gen_B, imgB)
-        loss_G = loss_G_GAN + loss_G_L1
+
+        " This is Adaptive L1 loss, which can balance black and white "
+        loss_G_L1 = weighted_L1(imgB, gen_B, 0.8)
+
+        # white_weight = 0.5
+        # white_weight *= 2
+        # weight = torch.tensor([2-white_weight, white_weight])  # [black weight, white weight]
+        # weight_ = weight[imgB.data.view(-1).long()].view_as(imgB)
+        # if cuda: weight_ = weight_.cuda()
+        # loss_G_L1 = loss_G_L1 * weight_
+        # loss_G_L1 = loss_G_L1.mean()
+        # from network import weighted_L1
+
+        loss_G = loss_G_GAN + loss_G_L1  # + 1 * (1 - torch.mean(torch.abs(gen_B)))  # 这里增添了正则项
 
         loss_G.backward()
         G_optimizer.step()
@@ -146,12 +169,10 @@ for epoch in range(epochs):
         realAB = torch.cat([imgA, imgB], dim=1)
         pred_real_D = D_net(realAB)
         loss_D_real = Patch_GAN_loss(pred_real_D, True, GAN_loss, cuda)
-        # loss_D_real = GAN_loss(pred_real_D, valid)
 
         fakeAB = torch.cat([imgA, gen_B.detach()], dim=1)  # it is important, detach preventing training G net when training D net
         pred_fake_D = D_net(fakeAB)
         loss_D_fake = Patch_GAN_loss(pred_fake_D, False, GAN_loss, cuda)
-        # loss_D_fake = GAN_loss(pred_fake_D, false)
 
         loss_D = loss_D_real + loss_D_fake
         loss_D.backward()
@@ -176,9 +197,24 @@ for epoch in range(epochs):
         # =============
         # save output
         # =============
-        if iter % 100 == 0:
+        if iter % 100 == 1:
             print('>>>> save tmp pics')
-            sheet = visualize_result(imgA[0], gen_B[0], imgB[0], width=300, save='result.png')
+            # sheet = visualize_result(imgA[0], gen_B[0], imgB[0], width=300, save='result.png')
+
+            idxs = [0, 10, 13, 15, 65]  # [100, 200, 300, 400, 501]  #
+            # idxs = [101, 201, 301, 401, 500]  # [0, 10, 13, 19, 25]
+            for i, idx in enumerate(idxs):
+                # 保证log出的是同一张图，这样具有可比性，10是马
+                # idx = np.random.randint(0, 550)
+                batch_val = ABdataset_noaug.__getitem__(idx)
+                vimgA = torch.unsqueeze(batch_val['A'], 0)  # image
+                vimgB = torch.unsqueeze(batch_val['B'], 0)  # sketch
+                if cuda:
+                    vimgA = vimgA.cuda()
+                    vimgB = vimgB.cuda()
+                vgen_B = G_net(vimgA)
+                sheet = visualize_result(vimgA[0], vgen_B[0], vimgB[0], width=300, save='result_' + str(i) + '.png')
+
         if iter % 2000 == 0 or iter == 1:
             print('>>>> save in log folder')
             for i in range(min(batch_size, 2)):

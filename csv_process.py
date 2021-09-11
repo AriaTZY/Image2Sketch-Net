@@ -78,7 +78,7 @@ class CSVManager:
         plt.cla()
         head, data_stack = self.read_data()
         iter_ls = data_stack[1]
-        for i in range(len(pick_cols)):
+        for i in range(1): #(len(pick_cols)):
             pick_now = pick_cols[i] + 2
             data_col = data_stack[pick_now]
             plt.plot(iter_ls, data_col, label=head[pick_now])
@@ -87,12 +87,11 @@ class CSVManager:
         plt.title('The loss curve of {}'.format(self.name))
         plt.legend()
         plt.savefig('loss_curve.png')
-        # plt.show()
+        plt.show()
 
 
 if __name__ == '__main__':
-    csv_log = CSVManager('test')
-    csv_log.generate_graph([0, 1, 2])
+    csv_log = CSVManager('deep_GAN_all')
     csv_log.generate_graph([0, 1, 2])
     # head, data = csv_log.read_data()
     # print(head)

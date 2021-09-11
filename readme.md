@@ -98,9 +98,45 @@ else:
 
 
 
-## 4. Result
+## 4. Separate Test
 
-### 4.1 Full Framework Results
+* Separately running the "natural image --> raster form sketch" and "virtual sketching" processes
+* Who can ignore this: 1) people don't want to generate stroke form sketch; 2) Who is very rich for super powerful GPU; 3) you don't need to run it on GPU.
+
+I understand some computer is not very powerful (for example, MINE 😟), while running those three network **on CUDA** in one-shot is impossible. So you have to separate to run them to get stroke form sketches.
+
+My computer: 8GB GPU, when run resolution = 2 (i.e., 848x848 input image), the memory was excceeded.
+
+---
+
+First, Let's run **Mask Net** and **Sketch Net** to get raster form sketches
+
+```shell
+python pipeline.py --datapath 'Your/datapath/of/test/images/' --outpath 'The/folder/of/output/' --cuda True --vec_switch False
+```
+
+Then the you will find there are two folder under your output path
+
+* gallery
+* sketch: please do not delete this !
+
+​     
+
+Second, run **"Virtual Sketching":**
+
+```shell
+python virtualSketchingBatch.py --cuda True --outpath 'The/path/you/want/to/out' --inpath 'sketch/path/as/generated/above' --sz 800
+```
+
+* sz: input resized size. Larger, more detailed output stroke sketch!
+
+Done! 
+
+
+
+## 5. Result
+
+### 5.1 Full Framework Results
 
 Here is the result of full pipeline, including Mask Net, Sketch Net, gamma enhancement (I didn't put the stroke form sketch here because it looks similar to the raster form)
 
@@ -122,7 +158,7 @@ Here is the result of full pipeline, including Mask Net, Sketch Net, gamma enhan
 
 
 
-### 4.2 Sketch Net Only Results:
+### 5.2 Sketch Net Only Results:
 
 Here is the results generated from the inputs which I manually crop the foreground objects. So it can eliminate the effect of Mask Net performance.
 
@@ -170,7 +206,7 @@ Here is the results generated from the inputs which I manually crop the foregrou
 
 the file under
 
-* **MasNet_v2_notcentre: **The network trained on not centered mask image data. trained on 24/07/2021
+* **MasNet_v2_notcentre:**The network trained on not centered mask image data. trained on 24/07/2021
 * **MaskNet_v2_stage1**: The model trained on centered mask data and saved on halfway, seems not overfitting
 * **MaskNet_v2_stage2:** The model saved after the full training, seems to have a serious overfitting
 * **deep_GAN_L1:** loss function: balanced BCE, lr: 0.001, new vgg discriminator

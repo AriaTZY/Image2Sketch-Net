@@ -21,6 +21,9 @@ class ImageDataset(Dataset):
         self.skt_path = os.path.join(self.path, 'sketch/')
         self.img_names = os.listdir(self.skt_path)
         self.aug = aug
+        self.table = []
+        for i in range(256):
+            self.table.append(0 if i<200 else 1)
 
     def augmentation(self, imgA, imgB, crop_prob=0.5, rotate_prob=0.5, flip_prob=0.5):
         imgA = imgA.resize((imgB.size[0], imgB.size[1]))
@@ -56,6 +59,7 @@ class ImageDataset(Dataset):
         if self.aug:
             img, skt = self.augmentation(img, skt)
         skt = skt.convert("L")  # image A is sketch, B is picture
+        # skt = skt.point(self.table, '1')  # 在这里二值化了，让图像变成绝对的0和1，为了更彻底地训练BCE
 
         imgA = self.transform(img)  # resize and from [0-255] to [0, 1]
         imgB = self.transform(skt)
@@ -66,6 +70,7 @@ class ImageDataset(Dataset):
         return len(self.img_names)
 
 
+# 只会读入（iphone）图片信息，图片可以是提前处理好的裁剪后的图片，也可以是未处理的自然图，但只返回一张图
 class ImageDatasetTest(Dataset):
     def __init__(self, path, img_size=128):
         super(ImageDatasetTest, self).__init__()
@@ -81,6 +86,7 @@ class ImageDatasetTest(Dataset):
     def __getitem__(self, item):
         img = Image.open(self.path + self.img_names[item])
         imgA = self.transform(img)  # resize and from [0-255] to [0, 1]
+        imgA = imgA[:3, :, :]
         return imgA
 
     def __len__(self):

@@ -33,41 +33,57 @@ def gamma(img, arg):
     return img
 
 
+# inverse image in HSV space
+def inverse_img(img):
+    hsv = cv.cvtColor(img, cv.COLOR_BGR2HSV)
+    hsv[:, :, 2] = 255-hsv[:, :, 2]
+
+    return cv.cvtColor(hsv, cv.COLOR_HSV2BGR)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--datapath', type=str, default='MaskDataSet/', help='The path of Test data, it can be a '
+    parser.add_argument('--datapath', type=str, default='input/iphone/', help='The path of Test data, it can be a '
                                                                              'folder or an image file name')
-    parser.add_argument('--outpath', type=str, default='output/Pipeline_and_vectorize/')
-    parser.add_argument('--cuda', type=bool, default=False)
+    parser.add_argument('--outpath', type=str, default='output/Test888/')
+    parser.add_argument('--cuda', type=str, default='False')
     parser.add_argument('--version', type=int, default=2)
     parser.add_argument('--maskmode', type=str, default='soft')  # or binary
     parser.add_argument('--softctr', type=float, default=0.5, help='soft control')  # smaller value can expose more object part
     parser.add_argument('--resolution', type=int, default=1)  # 1, 2, 3, 4 x 424 levels or 0 means 800 high resolution
-    parser.add_argument('--background', type=bool, default=True, help='whether to run mask net to crop foreground')
+    parser.add_argument('--background', type=str, default='True', help='whether to run mask net to crop foreground')
     parser.add_argument('--vec_input_sz', type=int, default=600, help='resize the sketch image to this size and input to vectorize net')
-    parser.add_argument('--vec_switch', type=bool, default=True, help='whether to do the vectorize')
-    parser.add_argument('--merge', type=bool, default=False, help='whether to use positive+negative and merge strategy')
+    parser.add_argument('--vec_switch', type=str, default='False', help='whether to do the vectorize')
+    parser.add_argument('--merge', type=str, default='False', help='whether to use positive+negative and merge strategy')
+    parser.add_argument('--gamma', type=str, default='True', help='whether to use gamma enhance')
     args = parser.parse_args()
 
     "For non-cmd run"
-    # args.datapath = 'E:/Postgraduate/Dataset/WithBack/image/'
-    args.datapath = '../Dataset/iphone/IMG_1060.JPG'
+    # args.datapath = 'F:/IMAGE_DATABASE/VOCtrainval_11-May-2012/VOCdevkit/VOC2012/JPEGImages/2007_003137.jpg'
+    # args.datapath = '../Dataset/iphone/IMG_0036.JPG'
 
-    cuda = args.cuda
+    # translate bool value
+    args_merge = True if args.merge == 'True' else False
+    args_gamma = True if args.gamma == 'True' else False
+    args_background = True if args.background == 'True' else False
+    args_vec_switch = True if args.vec_switch == 'True' else False
+
+    cuda = True if args.cuda == 'True' else False
     model_version = args.version
     print('Now Running Mask Model version: #', model_version)
 
     # ======================
     #    Create folders
     # ======================
-    sketch_folder = args.outpath + 'sketch/'
     gallery_folder = args.outpath + 'gallery/'
-    vector_folder = args.outpath + 'vector/'
-    gif_folder = args.outpath + 'gif/'
-    os.makedirs(sketch_folder, exist_ok=True)
     os.makedirs(gallery_folder, exist_ok=True)
-    os.makedirs(vector_folder, exist_ok=True)
-    os.makedirs(gif_folder, exist_ok=True)
+    sketch_folder = args.outpath + 'sketch/'
+    os.makedirs(sketch_folder, exist_ok=True)
+    if args_vec_switch:
+        vector_folder = args.outpath + 'vector/'
+        gif_folder = args.outpath + 'gif/'
+        os.makedirs(vector_folder, exist_ok=True)
+        os.makedirs(gif_folder, exist_ok=True)
 
     # ======================
     #  Network Preparation
@@ -138,8 +154,8 @@ if __name__ == '__main__':
 
             # " binary method "
             else:
-                mask_np[mask_np > 0.5] = 1
-                mask_np[mask_np <= 0.5] = 0
+                mask_np[mask_np > args.softctr] = 1
+                mask_np[mask_np <= args.softctr] = 0
                 mask_np = np.array(mask_np * 255, np.uint8)
                 mask_np = cv.resize(mask_np, dsize=(w, h))
                 ret, mask_np_inv = cv.threshold(mask_np, 120, 255, cv.THRESH_BINARY_INV)
@@ -147,14 +163,14 @@ if __name__ == '__main__':
                 cropped_img = cropped_img + cv.bitwise_and(white_background, white_background, mask=mask_np_inv)
 
             # when do mask net, no need to do gamma enhancement, but sketch needed!
-            cropped_img = gamma(cropped_img, 2.0)
+            if args_gamma: cropped_img = gamma(cropped_img, 2.0)
             cropped_img_tensor = image2tensor(cropped_img, img_sz=resized_size, mode='cv')
 
         # No Mask Net mode
         else:
             cropped_img = img
-            cropped_img_tensor = gamma(cropped_img, 2.0)
-            cropped_img_tensor = image2tensor(cropped_img_tensor, resized_size)
+            if args_gamma: cropped_img = gamma(cropped_img, 2.0)
+            cropped_img_tensor = image2tensor(cropped_img, resized_size)
 
         # ============================
         #         Sketch Net
@@ -170,7 +186,7 @@ if __name__ == '__main__':
 
 
     # pipeline, including reading, processing, display
-    def single_pipeline(back, img_path, merge=args.merge):
+    def single_pipeline(back, img_path, merge=args_merge):
         # img size after resize
         if args.resolution == 0: resized_size = 600
         else: resized_size = args.resolution * 424
@@ -184,19 +200,29 @@ if __name__ == '__main__':
         h, w = img.shape[:2]
         cropped_img, pred_sketch = core_process(back, img, resized_size)
         if merge:  # merge mode usually is used in animal object
-            _, pred_sketch2 = core_process(back, 255-img, resized_size)
+            inv_img = inverse_img(img)  # 255 - img
+            _, pred_sketch2 = core_process(back, inv_img, resized_size)
             pred_sketch = cv.bitwise_and(pred_sketch, pred_sketch2)
+            # save inter-media step result
+            # name_start = img_path[::-1].find('/')
+            # name_end = img_path[::-1].find('.')
+            # img_name = img_path[-name_start:-(name_end + 1)]
+            # cv.imwrite(args.outpath + img_name + '_invImg.png', inv_img)
+            # cv.imwrite(args.outpath + img_name + '_invSkt.png', pred_sketch2)
+            # cv.imwrite(args.outpath + img_name + '_posSkt.png', pred_sketch)
 
         # ============================
         #        Vectorize
         # ============================
-        if args.vec_switch:
-            saved_pred_sketch = cv.resize(pred_sketch, (args.vec_input_sz, int(args.vec_input_sz/pred_sketch.shape[1]*pred_sketch.shape[0])))
-            name_start = img_path[::-1].find('/')
-            name_end = img_path[::-1].find('.')
-            img_name = img_path[-name_start:-(name_end + 1)]
-            # save the result after sketchized
-            cv.imwrite(sketch_folder + img_name + '.png', saved_pred_sketch)
+        # save the result after sketchized, no matter do vectorization or not
+        saved_pred_sketch = cv.resize(pred_sketch, (args.vec_input_sz, int(args.vec_input_sz / pred_sketch.shape[1] * pred_sketch.shape[0])))
+        name_start = img_path[::-1].find('/')
+        name_end = img_path[::-1].find('.')
+        img_name = img_path[-name_start:-(name_end + 1)]
+        saved_pred_sketch = gamma(saved_pred_sketch, 3)  # gamma can make gray to black
+        cv.imwrite(sketch_folder + img_name + '.png', saved_pred_sketch)
+
+        if args_vec_switch:
             sketch2vector(sketch_folder, args.outpath, img_name + '.png', 1, model_base_dir='checkpoints/snapshot/')
 
         # ============================
@@ -215,13 +241,14 @@ if __name__ == '__main__':
     # ==================== single image test =====================
     if data_path[-3:].lower() == 'jpg' or data_path[-3:].lower() == 'png':
         print('Single image test mode')
-        sheet = single_pipeline(args.background, data_path)
+        sheet = single_pipeline(args_background, data_path)
         '''save image'''
         root = gallery_folder
         if not os.path.exists(root): os.makedirs(root)
         img_name = data_path[data_path.rfind('/') + 1:data_path.rfind('.')]
         save_name = '{}/{}.png'.format(root, img_name)
         cv.imwrite(save_name, sheet)
+        print('Save successfully, path:', save_name)
 
     # ==================== batch image test ==================
     else:
@@ -232,7 +259,7 @@ if __name__ == '__main__':
 
         for i, img_name in enumerate(img_names):
             img_path = data_path + '/' + img_name
-            sheet = single_pipeline(args.background, img_path)
+            sheet = single_pipeline(args_background, img_path)
             ''' save images '''
             img_name = img_name[:img_name.rfind('.')]
             save_name = '{}/{}.png'.format(out_root, img_name)
